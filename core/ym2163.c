@@ -50,11 +50,11 @@ static const int8_t WAVE_ROM[8][32] = {
     { 0 },
 };
 
-/* リズムオシレータ用。データシートに波形の規定はないため正弦波で代用する */
-static const int8_t SINE_ROM[32] = {
-      0,   6,  12,  17,  22,  26,  29,  30,  31,  30,  29,  26,  22,  17,  12,   6,
-      0,  -6, -12, -17, -22, -26, -29, -30, -31, -30, -29, -26, -22, -17, -12,  -6
-};
+/* リズムオシレータの音程成分。分周器出力そのままの矩形波 */
+#define RHYTHM_TONE_AMP  31
+static int32_t rhythm_tone(uint32_t phase) {
+    return (phase & 0x80000000u) ? RHYTHM_TONE_AMP : -RHYTHM_TONE_AMP;
+}
 
 /* =======================================================================
  *  楽音チャンネル
@@ -268,7 +268,7 @@ static int32_t melody_output(const Melody *m) {
 /* =======================================================================
  *  リズム音
  * ======================================================================= */
-/* 減衰時間・音程はデータシートに規定がない。実機の音を模した近似値 */
+/* 減衰時間・音程はデータシートに規定がない。実機の音に合わせた近似値 */
 static const int32_t RHYTHM_DECAY_MS[YM2163_NUM_RHYTHM] = {
     45,     /* HH クローズ。オープンはトリガー時に差し替える */
     250,    /* BD */
@@ -276,8 +276,9 @@ static const int32_t RHYTHM_DECAY_MS[YM2163_NUM_RHYTHM] = {
     130     /* SDN */
 };
 #define HH_OPEN_DECAY_MS  300
-#define BD_FREQ_HZ         60
+#define BD_FREQ_HZ        100
 #define HC_FREQ_HZ        260
+#define SDN_FREQ_HZ       300
 
 static int32_t rhythm_decay_rate(int32_t ms) {
     int64_t ticks = (int64_t)ms * (NATIVE_1MHZ / 1000);
@@ -341,6 +342,8 @@ static void update_rhythm_pitch(YM2163 *chip) {
         (uint32_t)(((uint64_t)BD_FREQ_HZ << 32) / nr);
     chip->rhy[YM2163_RHYTHM_HC].phase_inc =
         (uint32_t)(((uint64_t)HC_FREQ_HZ << 32) / nr);
+    chip->rhy[YM2163_RHYTHM_SDN].phase_inc =
+        (uint32_t)(((uint64_t)SDN_FREQ_HZ << 32) / nr);
 }
 
 /* =======================================================================
@@ -529,14 +532,19 @@ void YM2163_calc_native_pins(YM2163 *chip, int16_t *out) {
     for (i = 0; i < YM2163_NUM_RHYTHM; ++i)
         rhythm_step(&chip->rhy[i]);
 
+    /* BD / HC は矩形波のブリップ音 */
     acc[YM2163_PIN_RH1] +=
-        (SINE_ROM[PHASE_ADDR(chip->rhy[YM2163_RHYTHM_BD].phase)] *
+        (rhythm_tone(chip->rhy[YM2163_RHYTHM_BD].phase) *
          rhythm_amp(&chip->rhy[YM2163_RHYTHM_BD])) >> 5;
     acc[YM2163_PIN_RH1] +=
-        (SINE_ROM[PHASE_ADDR(chip->rhy[YM2163_RHYTHM_HC].phase)] *
+        (rhythm_tone(chip->rhy[YM2163_RHYTHM_HC].phase) *
          rhythm_amp(&chip->rhy[YM2163_RHYTHM_HC])) >> 5;
+
+    /* SDN は矩形波のブリップ音にノイズを乗せたもの。両者を等分に混ぜる */
     acc[YM2163_PIN_RH2] +=
-        (chip->noise_out_sd * rhythm_amp(&chip->rhy[YM2163_RHYTHM_SDN])) >> 5;
+        ((rhythm_tone(chip->rhy[YM2163_RHYTHM_SDN].phase) + chip->noise_out_sd) *
+         rhythm_amp(&chip->rhy[YM2163_RHYTHM_SDN])) >> 6;
+
     acc[YM2163_PIN_RH2] +=
         (chip->noise_out_hh * rhythm_amp(&chip->rhy[YM2163_RHYTHM_HH])) >> 5;
 
