@@ -1,0 +1,175 @@
+{
+  "sample_rate": 48000,
+  "global": {
+    "note_ms": 800,
+    "rest_ms": 200
+  },
+  "chips": {
+    "DSG": {
+      "_comment": "YM2163 楽音4ch + リズム4種. clock=1MHz. f = clock/(DV * 2^(3-oct)). DV=568/oct=2 で 440Hz",
+      "init": [
+        { "reg": "0x94", "val": "0x00" },
+        { "reg": "0x95", "val": "0x00" },
+        { "reg": "0x96", "val": "0x00" },
+        { "reg": "0x97", "val": "0x00" }
+      ],
+      "channels": [
+        {
+          "ch": 0,
+          "_comment": "St ストリングス / エンベロープ1 SUS=1 / 440Hz",
+          "init": [
+            { "reg": "0x88", "val": "0x31" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 1,
+          "_comment": "Or オルガン / エンベロープ1 SUS=1",
+          "init": [
+            { "reg": "0x88", "val": "0x32" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 2,
+          "_comment": "Cl クラリネット / エンベロープ1 SUS=1",
+          "init": [
+            { "reg": "0x88", "val": "0x33" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 3,
+          "_comment": "Pf ピアノ / エンベロープ0 SUS=0 (減衰音)",
+          "init": [
+            { "reg": "0x88", "val": "0x04" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 4,
+          "_comment": "Hc ハープシコード / エンベロープ0 SUS=0",
+          "init": [
+            { "reg": "0x88", "val": "0x05" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 5,
+          "_comment": "Cl / エンベロープ3 SUS=0 (ゲート動作)",
+          "init": [
+            { "reg": "0x88", "val": "0x63" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 6,
+          "_comment": "Cl / エンベロープ2 SUS=1 (1.2秒リリース)",
+          "init": [
+            { "reg": "0x88", "val": "0x53" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 7,
+          "_comment": "Cl / 音量 -6dB (VL2VL1=01)",
+          "init": [
+            { "reg": "0x88", "val": "0x33" },
+            { "reg": "0x8C", "val": "0x11" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 8,
+          "_comment": "St / OR1 と OR2 の両端子へ出力 (F1=F2=1)",
+          "init": [
+            { "reg": "0x88", "val": "0x31" },
+            { "reg": "0x8C", "val": "0x03" },
+            { "reg": "0x80", "val": "0x38" },
+            { "reg": "0x84", "val": "0x0C" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x4C" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x0C" } ]
+        },
+        {
+          "ch": 9,
+          "_comment": "St / 最低音 DV=1023 oct=1 (122Hz)",
+          "init": [
+            { "reg": "0x88", "val": "0x31" },
+            { "reg": "0x8C", "val": "0x01" },
+            { "reg": "0x80", "val": "0x7F" },
+            { "reg": "0x84", "val": "0x07" }
+          ],
+          "key_on":  [ { "reg": "0x84", "val": "0x47" } ],
+          "key_off": [ { "reg": "0x84", "val": "0x07" } ]
+        },
+        {
+          "ch": 10,
+          "_comment": "リズム BD バスドラム (RH1)",
+          "init": [ { "reg": "0x95", "val": "0x00" } ],
+          "key_on":  [ { "reg": "0x90", "val": "0x01" } ],
+          "key_off": [ { "reg": "0x90", "val": "0x00" } ]
+        },
+        {
+          "ch": 11,
+          "_comment": "リズム HC ハイコンガ (RH1)",
+          "init": [ { "reg": "0x96", "val": "0x00" } ],
+          "key_on":  [ { "reg": "0x90", "val": "0x02" } ],
+          "key_off": [ { "reg": "0x90", "val": "0x00" } ]
+        },
+        {
+          "ch": 12,
+          "_comment": "リズム SDN スネアドラムノイズ (RH2)",
+          "init": [ { "reg": "0x97", "val": "0x00" } ],
+          "key_on":  [ { "reg": "0x90", "val": "0x04" } ],
+          "key_off": [ { "reg": "0x90", "val": "0x00" } ]
+        },
+        {
+          "ch": 13,
+          "_comment": "リズム HHO ハイハット オープン (RH2)",
+          "init": [ { "reg": "0x94", "val": "0x00" } ],
+          "key_on":  [ { "reg": "0x90", "val": "0x08" } ],
+          "key_off": [ { "reg": "0x90", "val": "0x00" } ]
+        },
+        {
+          "ch": 14,
+          "_comment": "リズム HHD ハイハット クローズ (RH2)",
+          "init": [ { "reg": "0x94", "val": "0x00" } ],
+          "key_on":  [ { "reg": "0x90", "val": "0x10" } ],
+          "key_off": [ { "reg": "0x90", "val": "0x00" } ]
+        }
+      ]
+    }
+  }
+}
