@@ -58,11 +58,10 @@ struct FmEngineOpaque {
 // =========================================================
 struct ChipDesc {
     const char* name;
-    uint32_t    default_clock;
 };
 
 static const ChipDesc kChipTable[] = {
-    { "DSG", YM2163_DEFAULT_CLOCK },  // YM2163
+    { "DSG" },  // YM2163
 };
 static constexpr uint32_t kChipCount = (uint32_t)(sizeof(kChipTable) / sizeof(kChipTable[0]));
 
@@ -83,7 +82,7 @@ static std::unique_ptr<ChipEntry> createChip(
     auto e = std::make_unique<ChipEntry>();
     e->name        = desc.name;
     e->sample_rate = sample_rate;
-    e->clock       = (clock != 0) ? clock : desc.default_clock;
+    e->clock       = clock;
 
     e->dev.reset(YM2163_new(e->clock, sample_rate));
     if (!e->dev) return nullptr;
@@ -141,7 +140,9 @@ FMENGINE_API const char* FMENGINE_CALL FmEngine_GetSupportedChip(
 FMENGINE_API FmResult FMENGINE_CALL FmEngine_AddChip(
     FmEngineHandle engine, const char* name, uint32_t clock, uint32_t* out_id)
 {
-    if (!engine || !name) return FM_ERR_INVALID_ARG;
+    // コアの YM2163_new は clock=0 を 1MHz に読み替えるので、エンジンが既定の
+    // クロックを持たないようにここで止める
+    if (!engine || !name || clock == 0) return FM_ERR_INVALID_ARG;
     const ChipDesc* desc = findChipDesc(name);
     if (!desc) return FM_ERR_UNKNOWN_CHIP;
 
@@ -203,6 +204,32 @@ FMENGINE_API FmResult FMENGINE_CALL FmEngine_GetGain(
     return FM_OK;
 }
 
+// DSG は OR1〜OR4 / RH1 / RH2 を別々の端子から出すが、仕様書の部位の表に
+// DSG の部位は無く、表に無いチップは部位を持たない
+FMENGINE_API FmResult FMENGINE_CALL FmEngine_SetPartGain(
+    FmEngineHandle /*engine*/, uint32_t /*chip_id*/, FmPart /*part*/,
+    float /*gain_l*/, float /*gain_r*/)
+{
+    return FM_ERR_INVALID_ARG;
+}
+
+FMENGINE_API FmResult FMENGINE_CALL FmEngine_GetPartGain(
+    FmEngineHandle /*engine*/, uint32_t /*chip_id*/, FmPart /*part*/,
+    float* /*out_gain_l*/, float* /*out_gain_r*/)
+{
+    return FM_ERR_INVALID_ARG;
+}
+
+FMENGINE_API FmResult FMENGINE_CALL FmEngine_GetPartMask(
+    FmEngineHandle engine, uint32_t chip_id, uint32_t* out_mask)
+{
+    if (!engine || chip_id >= engine->chips.size() || !out_mask) return FM_ERR_INVALID_ARG;
+    *out_mask = 0;
+    return FM_OK;
+}
+
+// 外部メモリのバスを持たないので、ヘッダが宣言する任意の FmEngine_SetMemoryEx は
+// 定義しない
 FMENGINE_API FmResult FMENGINE_CALL FmEngine_SetMemory(
     FmEngineHandle engine, uint32_t chip_id,
     FmMemoryType /*mem_type*/, const uint8_t* /*data*/, uint32_t /*size*/)

@@ -6,6 +6,7 @@
   },
   "chips": {
     "DSG": {
+      "clock": 1000000,
       "_comment": "YM2163 楽音4ch + リズム4種. clock=1MHz. f = clock/(DV * 2^(3-oct)). DV=568/oct=2 で 440Hz",
       "init": [
         { "reg": "0x94", "val": "0x00" },

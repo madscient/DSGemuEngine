@@ -23,11 +23,14 @@ YAMAHA **YM2163 (DSG: Digital Sound Generator)** を実装した共有ライブ�
 
 ## 対応チップ一覧
 
-| チップ名 | 実チップ | デフォルトクロック | ネイティブレート |
-|---|---|---|---|
-| `DSG` | YM2163 | 1.000 MHz | 250,000 Hz |
+| チップ名 | 実チップ | ネイティブレート |
+|---|---|---|
+| `DSG` | YM2163 | clock / 4 (1 MHz で 250,000 Hz) |
 
 ネイティブレートはマスタークロックの 1/4 (楽音 4 チャンネルのマルチプレックス周期) です。
+
+クロックは `FmEngine_AddChip` の `clock` 引数で必ず指定します。エンジンは既定の
+クロックを持たず、0 を渡すと `FM_ERR_INVALID_ARG` を返します。
 
 ## ファイル構成
 
@@ -41,7 +44,7 @@ DSGemuEngine/
 ├── patches/
 │   └── dsg.json              ← FMEngineTest 用パッチ
 └── src/
-    ├── FmEngineApi.h         ← API ヘッダ (FMEngineTest と共通)
+    ├── FmEngineApi.h         ← API ヘッダ (FmEngineApi 共通)
     └── DSGemuEngine.cpp      ← エンジン実装
 ```
 
@@ -76,6 +79,9 @@ cp build/bin/libDSGemuEngine.so <FMEngineTest_dir>/
 cd <FMEngineTest_dir>
 ./FMEngineTest -e ./libDSGemuEngine.so patches/dsg.json
 ```
+
+`patches/dsg.json` は `clock` に 1,000,000 Hz を指定しており、レジスタ値はこの
+クロックを前提に書いてあります。
 
 ## レジスタマップ
 
@@ -183,6 +189,21 @@ F1〜F4 はそれぞれ OR1〜OR4 端子への出力可否です。チャンネ�
 リセットされ、IEN = 1 のときフラグの状態が IRQ 端子に反転出力されます。
 FmEngineApi にはフラグ読み出しの経路がないため、タイマーはコア API
 (`YM2163_read` / `YM2163_irq`) からのみ参照できます。
+
+## 部位ごとのゲインと外部メモリ
+
+FmEngineApi の任意エクスポートのうち、部位ごとのゲインの 3 関数をエクスポート
+していますが、`DSG` は部位を持ちません。OR1〜OR4 / RH1 / RH2 の端子ごとの
+バランスは調整できないので、音量は `FmEngine_SetGain` で設定します。
+
+| 関数 | 戻り値 |
+|---|---|
+| `FmEngine_GetPartMask` | `FM_OK` (マスクは 0) |
+| `FmEngine_SetPartGain` / `FmEngine_GetPartGain` | `FM_ERR_INVALID_ARG` |
+
+`DSG` は外部メモリを持たないので、`FmEngine_SetMemory` は `FM_ERR_UNAVAILABLE`、
+`FmEngine_GetMemorySize` は 0 を返します。任意エクスポートの
+`FmEngine_SetMemoryEx` はエクスポートしていません。
 
 ## チップコア単体での利用
 
