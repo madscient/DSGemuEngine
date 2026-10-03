@@ -25,23 +25,54 @@ static constexpr float kOutputScale = 1.0f / 16384.0f;
 static constexpr float kDcBlockHz = 5.0f;
 
 // =========================================================
+//  部位
+//  出力端子がそのまま部位になる。添字はコアの YM2163_PIN_* と共通
+// =========================================================
+static const char* const kPartNames[] = {
+    "OR1", "OR2", "OR3", "OR4", "RH1", "RH2",
+};
+static constexpr uint32_t kPartCount = (uint32_t)(sizeof(kPartNames) / sizeof(kPartNames[0]));
+
+static_assert(kPartCount == YM2163_NUM_PINS &&
+              YM2163_PIN_OR1 == 0 && YM2163_PIN_OR2 == 1 && YM2163_PIN_OR3 == 2 &&
+              YM2163_PIN_OR4 == 3 && YM2163_PIN_RH1 == 4 && YM2163_PIN_RH2 == 5,
+              "kPartNames must follow the YM2163_PIN_* order");
+
+static int findPart(const char* name) {
+    if (!name) return -1;
+    for (uint32_t i = 0; i < kPartCount; ++i)
+        if (strcmp(kPartNames[i], name) == 0)
+            return (int)i;
+    return -1;
+}
+
+// =========================================================
 //  チップエントリ
 // =========================================================
 struct ChipEntry {
     std::string name;
     uint32_t    sample_rate = 0;
     uint32_t    clock       = 0;
-    uint32_t    native_rate = 0;
 
     struct Deleter { void operator()(YM2163* p) const { YM2163_delete(p); } };
     std::unique_ptr<YM2163, Deleter> dev;
 
-    float dc_r    = 0.0f;   // 直流阻止フィルタの極
-    float dc_x1   = 0.0f;
-    float dc_y1   = 0.0f;
+    // 直流阻止フィルタ。部位ゲインが L/R で違うと入力が別の信号になるので、
+    // 状態を L/R ([0] / [1]) で分けて持つ
+    float dc_r     = 0.0f;   // 極
+    float dc_x1[2] = { 0.0f, 0.0f };
+    float dc_y1[2] = { 0.0f, 0.0f };
 
     float gain_l = 1.0f;
     float gain_r = 1.0f;
+
+    float part_gain_l[kPartCount];
+    float part_gain_r[kPartCount];
+
+    ChipEntry() {
+        std::fill_n(part_gain_l, kPartCount, 1.0f);
+        std::fill_n(part_gain_r, kPartCount, 1.0f);
+    }
 };
 
 // =========================================================
@@ -86,7 +117,6 @@ static std::unique_ptr<ChipEntry> createChip(
 
     e->dev.reset(YM2163_new(e->clock, sample_rate));
     if (!e->dev) return nullptr;
-    e->native_rate = YM2163_native_rate(e->dev.get());
 
     const float r = 1.0f - (2.0f * 3.14159265f * kDcBlockHz / (float)sample_rate);
     e->dc_r = std::max(0.0f, std::min(0.99999f, r));
@@ -99,14 +129,27 @@ static std::unique_ptr<ChipEntry> createChip(
 //  コア側でレート変換済みなので 1 回呼ぶだけでよい
 // =========================================================
 static void chipCalcStereo(ChipEntry& c, float& out_l, float& out_r) {
-    const float x = (float)YM2163_calc(c.dev.get());
-    const float y = x - c.dc_x1 + c.dc_r * c.dc_y1;
-    c.dc_x1 = x;
-    c.dc_y1 = y;
+    int16_t pins[YM2163_NUM_PINS];
+    YM2163_calc_pins(c.dev.get(), pins);
 
-    const float v = y * kOutputScale;
-    out_l += v * c.gain_l;
-    out_r += v * c.gain_r;
+    float x[2] = { 0.0f, 0.0f };
+    for (uint32_t p = 0; p < kPartCount; ++p) {
+        x[0] += (float)pins[p] * c.part_gain_l[p];
+        x[1] += (float)pins[p] * c.part_gain_r[p];
+    }
+
+    const float gain[2] = { c.gain_l, c.gain_r };
+    float* const out[2] = { &out_l, &out_r };
+    for (int ch = 0; ch < 2; ++ch) {
+        // コアの YM2163_calc が全端子の合成に掛ける 16 ビットの飽和と同じ。
+        // 部位ゲインがすべて 1.0 のとき、合成値が YM2163_calc と一致する
+        const float xs = std::max(-32768.0f, std::min(32767.0f, x[ch]));
+        const float y  = xs - c.dc_x1[ch] + c.dc_r * c.dc_y1[ch];
+        c.dc_x1[ch] = xs;
+        c.dc_y1[ch] = y;
+
+        *out[ch] += y * kOutputScale * gain[ch];
+    }
 }
 
 // =========================================================
@@ -161,13 +204,6 @@ FMENGINE_API const char* FMENGINE_CALL FmEngine_GetChipName(
     return engine->chips[chip_id]->name.c_str();
 }
 
-FMENGINE_API uint32_t FMENGINE_CALL FmEngine_GetNativeRate(
-    FmEngineHandle engine, uint32_t chip_id)
-{
-    if (!engine || chip_id >= engine->chips.size()) return 0;
-    return engine->chips[chip_id]->native_rate;
-}
-
 FMENGINE_API uint32_t FMENGINE_CALL FmEngine_GetSampleRate(FmEngineHandle engine) {
     if (!engine) return 0;
     return engine->sample_rate;
@@ -204,46 +240,46 @@ FMENGINE_API FmResult FMENGINE_CALL FmEngine_GetGain(
     return FM_OK;
 }
 
-// DSG は OR1〜OR4 / RH1 / RH2 を別々の端子から出すが、仕様書の部位の表に
-// DSG の部位は無く、表に無いチップは部位を持たない
+FMENGINE_API uint32_t FMENGINE_CALL FmEngine_GetPartCount(
+    FmEngineHandle engine, uint32_t chip_id)
+{
+    if (!engine || chip_id >= engine->chips.size()) return 0;
+    return kPartCount;
+}
+
+FMENGINE_API const char* FMENGINE_CALL FmEngine_GetPartName(
+    FmEngineHandle engine, uint32_t chip_id, uint32_t index)
+{
+    if (!engine || chip_id >= engine->chips.size() || index >= kPartCount) return nullptr;
+    return kPartNames[index];
+}
+
 FMENGINE_API FmResult FMENGINE_CALL FmEngine_SetPartGain(
-    FmEngineHandle /*engine*/, uint32_t /*chip_id*/, FmPart /*part*/,
-    float /*gain_l*/, float /*gain_r*/)
+    FmEngineHandle engine, uint32_t chip_id, const char* part,
+    float gain_l, float gain_r)
 {
-    return FM_ERR_INVALID_ARG;
-}
-
-FMENGINE_API FmResult FMENGINE_CALL FmEngine_GetPartGain(
-    FmEngineHandle /*engine*/, uint32_t /*chip_id*/, FmPart /*part*/,
-    float* /*out_gain_l*/, float* /*out_gain_r*/)
-{
-    return FM_ERR_INVALID_ARG;
-}
-
-FMENGINE_API FmResult FMENGINE_CALL FmEngine_GetPartMask(
-    FmEngineHandle engine, uint32_t chip_id, uint32_t* out_mask)
-{
-    if (!engine || chip_id >= engine->chips.size() || !out_mask) return FM_ERR_INVALID_ARG;
-    *out_mask = 0;
+    if (!engine || chip_id >= engine->chips.size()) return FM_ERR_INVALID_ARG;
+    const int p = findPart(part);
+    if (p < 0) return FM_ERR_INVALID_ARG;
+    engine->chips[chip_id]->part_gain_l[p] = gain_l;
+    engine->chips[chip_id]->part_gain_r[p] = gain_r;
     return FM_OK;
 }
 
-// 外部メモリのバスを持たないので、ヘッダが宣言する任意の FmEngine_SetMemoryEx は
-// 定義しない
-FMENGINE_API FmResult FMENGINE_CALL FmEngine_SetMemory(
-    FmEngineHandle engine, uint32_t chip_id,
-    FmMemoryType /*mem_type*/, const uint8_t* /*data*/, uint32_t /*size*/)
+FMENGINE_API FmResult FMENGINE_CALL FmEngine_GetPartGain(
+    FmEngineHandle engine, uint32_t chip_id, const char* part,
+    float* out_gain_l, float* out_gain_r)
 {
     if (!engine || chip_id >= engine->chips.size()) return FM_ERR_INVALID_ARG;
-    return FM_ERR_UNAVAILABLE;  // 波形は内蔵 ROM のみで外部メモリを持たない
+    const int p = findPart(part);
+    if (p < 0) return FM_ERR_INVALID_ARG;
+    if (out_gain_l) *out_gain_l = engine->chips[chip_id]->part_gain_l[p];
+    if (out_gain_r) *out_gain_r = engine->chips[chip_id]->part_gain_r[p];
+    return FM_OK;
 }
 
-FMENGINE_API uint32_t FMENGINE_CALL FmEngine_GetMemorySize(
-    FmEngineHandle engine, uint32_t /*chip_id*/, FmMemoryType /*mem_type*/)
-{
-    (void)engine;
-    return 0;
-}
+// 波形は内蔵 ROM だけで外部メモリを持たないので、ヘッダが宣言する外部メモリの
+// 関数 (任意の組) は定義しない
 
 FMENGINE_API FmResult FMENGINE_CALL FmEngine_Generate(
     FmEngineHandle engine, float* out_l, float* out_r, uint32_t samples)

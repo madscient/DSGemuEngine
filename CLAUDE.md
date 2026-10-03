@@ -13,15 +13,17 @@
 
 ## 規則
 
-- **`src/FmEngineApi.h` は YMEngine の `src/FmEngineApi.h` の写し。** 中身を直接
-  直さない。API の仕様の正は FMEngineTest の `docs/FmEngineApi.md`。改訂されたら
-  両方を見て写し直し、エンジンを追随させる。写した版は `doc/plan.md` §1 に書く
-- **`FmMemoryType` や `FmPart` の値を独自に足さない。** 番号は仕様書で割り当てる。
-  足りない種別や部位が要るときは、仕様書への追加をユーザーに相談する
+- **`src/FmEngineApi.h` は FMEngineTest の `include/FmEngineApi.h` の写し。** 中身を
+  直接直さない。API の仕様の正は同じリポジトリの `docs/FmEngineApi.md`、各エンジンに
+  求める対応は `docs/CHANGELOG.md` にある。改訂されたら 3 つを読んで写し直し、
+  エンジンを追随させる。写した版は `doc/plan.md` §1 に書く
+- **部位の名前 (`OR1`〜`OR4` / `RH1` / `RH2`) と既定値は公開済みの値。** 変えると
+  アプリケーションや、名前を書いた設定ファイルに及ぶ。変える前にユーザーに聞く。
+  仕様書の表に DSG が載ったら、表の名前に合わせる
 - **`core/` は FmEngineApi に依存させない。** 単体で他プロジェクトに組み込める
   ことが前提。FmEngineApi の規則 (clock=0 の拒否など) はエンジン層
   (`src/DSGemuEngine.cpp`) で守る
 - **公開リポジトリである。** ローカルのパスや個人の情報を成果物・コミットメッセージに
   書かない。他のリポジトリは GitHub 上の名前とコミットで指す
 - **外から見える値は決める前にユーザーに聞く。** チップ名、`reg` / `port` の意味、
-  `FmEngine_SetMemory` の種別、部位マスクなど
+  部位や外部メモリの名前、エクスポートするシンボルの増減など

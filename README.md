@@ -83,6 +83,9 @@ cd <FMEngineTest_dir>
 `patches/dsg.json` は `clock` に 1,000,000 Hz を指定しており、レジスタ値はこの
 クロックを前提に書いてあります。
 
+`FmEngine_GetNativeRate` を必須シンボルとして読む古い FMEngineTest からは
+ロードできません。
+
 ## レジスタマップ
 
 `FmEngine_Write(engine, chip_id, reg, val, port)` の `reg` に下表のアドレス、
@@ -190,20 +193,35 @@ F1〜F4 はそれぞれ OR1〜OR4 端子への出力可否です。チャンネ�
 FmEngineApi にはフラグ読み出しの経路がないため、タイマーはコア API
 (`YM2163_read` / `YM2163_irq`) からのみ参照できます。
 
-## 部位ごとのゲインと外部メモリ
+## 部位ごとのゲイン
 
-FmEngineApi の任意エクスポートのうち、部位ごとのゲインの 3 関数をエクスポート
-していますが、`DSG` は部位を持ちません。OR1〜OR4 / RH1 / RH2 の端子ごとの
-バランスは調整できないので、音量は `FmEngine_SetGain` で設定します。
+出力端子がそのまま FmEngineApi の部位になります。`FmEngine_SetPartGain` で
+端子ごとに L/R のゲインを設定でき、実機では外部回路で行う端子間のバランスや
+定位を作れます。
 
-| 関数 | 戻り値 |
-|---|---|
-| `FmEngine_GetPartMask` | `FM_OK` (マスクは 0) |
-| `FmEngine_SetPartGain` / `FmEngine_GetPartGain` | `FM_ERR_INVALID_ARG` |
+| 部位の名前 | 出力される音 | 既定値 |
+|---|---|---|
+| `OR1` | F1 = 1 の楽音チャンネル | 1.0 |
+| `OR2` | F2 = 1 の楽音チャンネル | 1.0 |
+| `OR3` | F3 = 1 の楽音チャンネル | 1.0 |
+| `OR4` | F4 = 1 の楽音チャンネル | 1.0 |
+| `RH1` | BD / HC | 1.0 |
+| `RH2` | SDN / HHO / HHD | 1.0 |
 
-`DSG` は外部メモリを持たないので、`FmEngine_SetMemory` は `FM_ERR_UNAVAILABLE`、
-`FmEngine_GetMemorySize` は 0 を返します。任意エクスポートの
-`FmEngine_SetMemoryEx` はエクスポートしていません。
+実際に掛かるゲインは `FmEngine_SetGain` のゲイン × 部位のゲインです。
+既定値のままなら、全端子を同じ比率で加算した信号を L/R に出します。
+
+```c
+FmEngine_SetPartGain(engine, chip_id, "OR1", 1.0f, 0.0f);   /* OR1 を左へ */
+FmEngine_SetPartGain(engine, chip_id, "OR2", 0.0f, 1.0f);   /* OR2 を右へ */
+FmEngine_SetPartGain(engine, chip_id, "RH2", 0.5f, 0.5f);   /* RH2 を -6dB */
+```
+
+## 外部メモリ
+
+`DSG` は外部メモリを持たないので、FmEngineApi の外部メモリの関数
+(`FmEngine_GetMemoryCount` / `FmEngine_GetMemoryName` / `FmEngine_SetMemory` /
+`FmEngine_SetMemoryEx`) はエクスポートしていません。
 
 ## チップコア単体での利用
 
@@ -245,10 +263,11 @@ YM2163_delete(chip);
 - **リズムレベル** — 線形減衰として実装しています (レベル 31 が最小音量、無音ではない)。
 - **直流阻止** — Or / Pf / Hc の波形は直流成分を持ち、エンベロープがそれを振幅変調
   します。実機の出力段と同じくエンジン層で交流結合 (5Hz ハイパスフィルタ) しています。
+  フィルタは、端子を加算した後の L/R それぞれに掛けます。
   コア (`core/`) の出力は直流成分を含んだままです。
 - **端子のミキシング** — OR1〜OR4 / RH1 / RH2 は実機では外部負荷抵抗 (標準 1kΩ) で
-  ミキシングします。`FmEngine_Generate` は全端子を単純加算してモノラル出力し、
-  L/R に同じ信号を出します。
+  ミキシングします。`FmEngine_Generate` は各端子に部位のゲインを掛けて加算します。
+  加算した値は、コアの `YM2163_calc` と同じく 16 ビットの範囲で飽和します。
 
 ## ライセンス
 
